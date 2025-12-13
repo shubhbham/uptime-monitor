@@ -152,7 +152,7 @@ WRITE_TIMEOUT=10
 ENVIRONMENT=development
 
 # Database Configuration (Supabase)
-DATABASE_URL=postgresql://postgres.erwiqyzcifqbelpmzgai:Shubhbham%40321%2A@aws-1-ap-south-1.pooler.supabase.com:5432/postgres
+DATABASE_URL=postgresql://postgres.[projectID]:[Password]@aws-1-ap-south-1.pooler.supabase.com:5432/postgres
 DB_SSL_MODE=require
 DB_MAX_CONNS=25
 DB_MIN_CONNS=5

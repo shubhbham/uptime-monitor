@@ -22,12 +22,15 @@ func (a *App) SetupRoutes() {
 		})
 	})
 
+	// Monitor routes
 	monitor.RegisterRoutes(api, a.MonitorHandler)
 
+	// Incident routes
 	api.Get("/incidents", a.IncidentHandler.ListAll)
 	api.Get("/incidents/recent", a.IncidentHandler.GetRecent)
 	api.Get("/monitors/:monitor_id/incidents", a.IncidentHandler.ListByMonitor)
 
+	// Stats routes
 	api.Get("/stats/:monitor_id", func(c *fiber.Ctx) error {
 		monitorID := c.Params("monitor_id")
 		stats, err := a.MetricsService.GetStats(c.Context(), monitorID)
@@ -50,6 +53,25 @@ func (a *App) SetupRoutes() {
 		return c.JSON(uptime)
 	})
 
+	// Debug/Admin routes
+	api.Get("/scheduler/status", func(c *fiber.Ctx) error {
+		scheduledMonitors := a.Scheduler.GetScheduledMonitors()
+		return c.JSON(fiber.Map{
+			"scheduled_count": len(scheduledMonitors),
+			"monitor_ids":     scheduledMonitors,
+		})
+	})
+
+	api.Get("/scheduler/monitor/:id", func(c *fiber.Ctx) error {
+		monitorID := c.Params("id")
+		isScheduled := a.Scheduler.IsMonitorScheduled(monitorID)
+		return c.JSON(fiber.Map{
+			"monitor_id":  monitorID,
+			"is_scheduled": isScheduled,
+		})
+	})
+
+	// Root endpoint
 	a.Fiber.Get("/", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
 			"message": "Uptime Monitor API",
@@ -59,6 +81,7 @@ func (a *App) SetupRoutes() {
 				"monitors": "/api/v1/monitors",
 				"incidents": "/api/v1/incidents",
 				"stats":    "/api/v1/stats/:monitor_id",
+				"scheduler": "/api/v1/scheduler/status",
 			},
 		})
 	})

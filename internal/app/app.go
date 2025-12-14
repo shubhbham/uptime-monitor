@@ -54,6 +54,9 @@ func NewApp(cfg *config.Config) (*App, error) {
 
 	sched := scheduler.NewScheduler(httpChecker, monitorRepo, incidentRepo, metricsService)
 
+	// IMPORTANT: Set scheduler in monitor service for lifecycle management
+	monitorService.SetScheduler(sched)
+
 	app := fiber.New(fiber.Config{
 		ErrorHandler:  middleware.ErrorHandler(),
 		ReadTimeout:   cfg.Server.ReadTimeout,

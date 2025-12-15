@@ -34,8 +34,21 @@ fmt: ## Format code
 lint: ## Run linter (requires golangci-lint)
 	golangci-lint run
 
+# ---------------- Docker ----------------
+
+DOCKER_USER := your-dockerhub-username
+IMAGE_NAME := uptime-monitor
+IMAGE_TAG ?= latest
+IMAGE := $(DOCKER_USER)/$(IMAGE_NAME):$(IMAGE_TAG)
+
 docker-build: ## Build Docker image
-	docker build -t uptime-monitor:latest .
+	docker build -t $(IMAGE) .
 
 docker-run: ## Run Docker container
-	docker run -p 5000:5000 --env-file .env uptime-monitor:latest
+	docker run -p 5000:5000 --env-file .env $(IMAGE)
+
+docker-push: ## Push Docker image to Docker Hub
+	docker push $(IMAGE)
+
+docker-release: docker-build docker-push ## Build and push Docker image
+	@echo "Docker image $(IMAGE) pushed successfully."

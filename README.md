@@ -121,7 +121,7 @@ monitor_stats (Cached Metrics)
 
 ### Prerequisites
 
-- Go 1.21 or higher
+- Go 1.24 or higher
 - PostgreSQL (Supabase recommended)
 - Make (optional, for Makefile commands)
 
@@ -341,14 +341,20 @@ make fmt
 ### Available Make Commands
 
 ```bash
-make help          # Show available commands
-make deps          # Install dependencies
-make build         # Build application
-make run           # Run application
-make dev           # Run with hot reload
-make test          # Run tests
-make clean         # Clean build artifacts
-make fmt           # Format code
+make help           # Show available commands
+make deps           # Install dependencies
+make build          # Build application
+make run            # Run application
+make dev            # Run with hot reload
+make test           # Run tests
+make clean          # Clean build artifacts
+make fmt            # Format code
+make docker-build   # Build Docker image
+make docker-run     # Run Docker container
+make docker-push    # Push Docker image
+make docker-release # Release Docker image
+make docker-release IMAGE_TAG=v1.0.0 # Release specific tag
+
 ```
 
 ## How It Works

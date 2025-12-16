@@ -14,6 +14,9 @@ func NewHandler(service *Service) *Handler {
 }
 
 func (h *Handler) Create(c *fiber.Ctx) error {
+	// Get authenticated user from context
+	authCtx := c.Locals("auth").(*domain.AuthContext)
+
 	var req domain.CreateMonitorRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -21,7 +24,7 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 		})
 	}
 
-	monitor, err := h.service.CreateMonitor(c.Context(), &req)
+	monitor, err := h.service.CreateMonitor(c.Context(), authCtx.UserID, &req)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -32,14 +35,16 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 }
 
 func (h *Handler) Get(c *fiber.Ctx) error {
+	authCtx := c.Locals("auth").(*domain.AuthContext)
 	id := c.Params("id")
+	
 	if id == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Monitor ID is required",
 		})
 	}
 
-	monitor, err := h.service.GetMonitor(c.Context(), id)
+	monitor, err := h.service.GetMonitor(c.Context(), id, authCtx.UserID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Monitor not found",
@@ -50,7 +55,9 @@ func (h *Handler) Get(c *fiber.Ctx) error {
 }
 
 func (h *Handler) List(c *fiber.Ctx) error {
-	monitors, err := h.service.ListMonitors(c.Context())
+	authCtx := c.Locals("auth").(*domain.AuthContext)
+
+	monitors, err := h.service.ListMonitors(c.Context(), authCtx.UserID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch monitors",
@@ -61,7 +68,9 @@ func (h *Handler) List(c *fiber.Ctx) error {
 }
 
 func (h *Handler) Update(c *fiber.Ctx) error {
+	authCtx := c.Locals("auth").(*domain.AuthContext)
 	id := c.Params("id")
+	
 	if id == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Monitor ID is required",
@@ -75,7 +84,7 @@ func (h *Handler) Update(c *fiber.Ctx) error {
 		})
 	}
 
-	monitor, err := h.service.UpdateMonitor(c.Context(), id, &req)
+	monitor, err := h.service.UpdateMonitor(c.Context(), id, authCtx.UserID, &req)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -86,14 +95,16 @@ func (h *Handler) Update(c *fiber.Ctx) error {
 }
 
 func (h *Handler) Delete(c *fiber.Ctx) error {
+	authCtx := c.Locals("auth").(*domain.AuthContext)
 	id := c.Params("id")
+	
 	if id == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Monitor ID is required",
 		})
 	}
 
-	if err := h.service.DeleteMonitor(c.Context(), id); err != nil {
+	if err := h.service.DeleteMonitor(c.Context(), id, authCtx.UserID); err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -103,10 +114,20 @@ func (h *Handler) Delete(c *fiber.Ctx) error {
 }
 
 func (h *Handler) GetChecks(c *fiber.Ctx) error {
+	authCtx := c.Locals("auth").(*domain.AuthContext)
 	id := c.Params("id")
+	
 	if id == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Monitor ID is required",
+		})
+	}
+
+	// Verify the monitor belongs to the user
+	_, err := h.service.GetMonitor(c.Context(), id, authCtx.UserID)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "Monitor not found",
 		})
 	}
 

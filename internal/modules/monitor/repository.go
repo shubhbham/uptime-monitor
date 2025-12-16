@@ -63,6 +63,29 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*domain.Monitor, e
 	return &monitor, nil
 }
 
+// GetByIDForUser gets a monitor owned by a specific user
+func (r *Repository) GetByIDForUser(ctx context.Context, id, userID string) (*domain.Monitor, error) {
+	query := `
+		SELECT id, user_id, name, url, method, expected_status, interval_seconds, 
+		       timeout_seconds, is_active, created_at, updated_at
+		FROM monitors
+		WHERE id = $1 AND user_id = $2
+	`
+
+	var monitor domain.Monitor
+	err := r.db.QueryRow(ctx, query, id, userID).Scan(
+		&monitor.ID, &monitor.UserID, &monitor.Name, &monitor.URL,
+		&monitor.Method, &monitor.ExpectedStatus, &monitor.IntervalSeconds,
+		&monitor.TimeoutSeconds, &monitor.IsActive, &monitor.CreatedAt, &monitor.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get monitor: %w", err)
+	}
+
+	return &monitor, nil
+}
+
 func (r *Repository) List(ctx context.Context) ([]*domain.Monitor, error) {
 	query := `
 		SELECT id, user_id, name, url, method, expected_status, interval_seconds,
@@ -72,6 +95,39 @@ func (r *Repository) List(ctx context.Context) ([]*domain.Monitor, error) {
 	`
 
 	rows, err := r.db.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list monitors: %w", err)
+	}
+	defer rows.Close()
+
+	var monitors []*domain.Monitor
+	for rows.Next() {
+		var monitor domain.Monitor
+		err := rows.Scan(
+			&monitor.ID, &monitor.UserID, &monitor.Name, &monitor.URL,
+			&monitor.Method, &monitor.ExpectedStatus, &monitor.IntervalSeconds,
+			&monitor.TimeoutSeconds, &monitor.IsActive, &monitor.CreatedAt, &monitor.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan monitor: %w", err)
+		}
+		monitors = append(monitors, &monitor)
+	}
+
+	return monitors, nil
+}
+
+// ListForUser lists monitors owned by a specific user
+func (r *Repository) ListForUser(ctx context.Context, userID string) ([]*domain.Monitor, error) {
+	query := `
+		SELECT id, user_id, name, url, method, expected_status, interval_seconds,
+		       timeout_seconds, is_active, created_at, updated_at
+		FROM monitors
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+	`
+
+	rows, err := r.db.Query(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list monitors: %w", err)
 	}
@@ -127,9 +183,58 @@ func (r *Repository) Update(ctx context.Context, id string, req *domain.UpdateMo
 	return &monitor, nil
 }
 
+// UpdateForUser updates a monitor owned by a specific user
+func (r *Repository) UpdateForUser(ctx context.Context, id, userID string, req *domain.UpdateMonitorRequest) (*domain.Monitor, error) {
+	query := `
+		UPDATE monitors
+		SET name = COALESCE($3, name),
+		    url = COALESCE($4, url),
+		    method = COALESCE($5, method),
+		    expected_status = COALESCE($6, expected_status),
+		    interval_seconds = COALESCE($7, interval_seconds),
+		    timeout_seconds = COALESCE($8, timeout_seconds),
+		    is_active = COALESCE($9, is_active),
+		    updated_at = NOW()
+		WHERE id = $1 AND user_id = $2
+		RETURNING id, user_id, name, url, method, expected_status, interval_seconds,
+		          timeout_seconds, is_active, created_at, updated_at
+	`
+
+	var monitor domain.Monitor
+	err := r.db.QueryRow(ctx, query,
+		id, userID, req.Name, req.URL, req.Method, req.ExpectedStatus,
+		req.IntervalSeconds, req.TimeoutSeconds, req.IsActive,
+	).Scan(
+		&monitor.ID, &monitor.UserID, &monitor.Name, &monitor.URL,
+		&monitor.Method, &monitor.ExpectedStatus, &monitor.IntervalSeconds,
+		&monitor.TimeoutSeconds, &monitor.IsActive, &monitor.CreatedAt, &monitor.UpdatedAt,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to update monitor: %w", err)
+	}
+
+	return &monitor, nil
+}
+
 func (r *Repository) Delete(ctx context.Context, id string) error {
 	query := `DELETE FROM monitors WHERE id = $1`
 	result, err := r.db.Exec(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete monitor: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("monitor not found")
+	}
+
+	return nil
+}
+
+// DeleteForUser deletes a monitor owned by a specific user
+func (r *Repository) DeleteForUser(ctx context.Context, id, userID string) error {
+	query := `DELETE FROM monitors WHERE id = $1 AND user_id = $2`
+	result, err := r.db.Exec(ctx, query, id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to delete monitor: %w", err)
 	}

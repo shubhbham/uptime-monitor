@@ -11,6 +11,7 @@ type Config struct {
 	Server   ServerConfig
 	Database DatabaseConfig
 	Monitor  MonitorConfig
+	Auth     AuthConfig
 }
 
 type ServerConfig struct {
@@ -32,6 +33,20 @@ type MonitorConfig struct {
 	MaxRetries         int
 	DefaultTimeout     time.Duration
 	StatsUpdatePeriod  time.Duration
+}
+
+type AuthConfig struct {
+	// Clerk configuration
+	ClerkSecretKey      string
+	ClerkJWKSURL        string
+	ClerkPublishableKey string
+	
+	// API Key configuration
+	APIKeyPrefix        string
+	APIKeyLength        int
+	
+	// JWT configuration
+	JWTExpirationHours  int
 }
 
 func LoadConfig() (*Config, error) {
@@ -85,6 +100,15 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
 
+	// Auth configuration
+	clerkSecretKey := getEnv("CLERK_SECRET_KEY", "")
+	clerkJWKSURL := getEnv("CLERK_JWKS_URL", "https://intense-moth-17.clerk.accounts.dev/.well-known/jwks.json")
+	clerkPublishableKey := getEnv("CLERK_PUBLISHABLE_KEY", "")
+
+	apiKeyPrefix := getEnv("API_KEY_PREFIX", "sk_live_")
+	apiKeyLength, _ := getEnvAsInt("API_KEY_LENGTH", 32)
+	jwtExpirationHours, _ := getEnvAsInt("JWT_EXPIRATION_HOURS", 24)
+
 	return &Config{
 		Server: ServerConfig{
 			Port:         port,
@@ -103,6 +127,14 @@ func LoadConfig() (*Config, error) {
 			MaxRetries:        maxRetries,
 			DefaultTimeout:    time.Duration(defaultTimeout) * time.Second,
 			StatsUpdatePeriod: time.Duration(statsUpdatePeriod) * time.Second,
+		},
+		Auth: AuthConfig{
+			ClerkSecretKey:      clerkSecretKey,
+			ClerkJWKSURL:        clerkJWKSURL,
+			ClerkPublishableKey: clerkPublishableKey,
+			APIKeyPrefix:        apiKeyPrefix,
+			APIKeyLength:        apiKeyLength,
+			JWTExpirationHours:  jwtExpirationHours,
 		},
 	}, nil
 }

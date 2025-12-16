@@ -20,7 +20,7 @@ type Service struct {
 func NewService(repo *Repository) *Service {
 	return &Service{
 		repo:      repo,
-		scheduler: nil, // Will be set by SetScheduler
+		scheduler: nil,
 	}
 }
 
@@ -28,55 +28,52 @@ func (s *Service) SetScheduler(scheduler SchedulerManager) {
 	s.scheduler = scheduler
 }
 
-func (s *Service) CreateMonitor(ctx context.Context, req *domain.CreateMonitorRequest) (*domain.Monitor, error) {
+func (s *Service) CreateMonitor(ctx context.Context, userID string, req *domain.CreateMonitorRequest) (*domain.Monitor, error) {
 	if err := ValidateCreateRequest(req); err != nil {
 		return nil, err
 	}
+
+	// Set the user_id from authenticated context
+	req.UserID = &userID
 
 	monitor, err := s.repo.Create(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	// Immediately schedule the monitor if scheduler is available
 	if s.scheduler != nil && monitor.IsActive {
 		if err := s.scheduler.AddMonitor(monitor); err != nil {
-			// Log error but don't fail the creation
-			// The monitor will be picked up on next restart
-			// In production, you might want to implement retry logic
+			// Log but don't fail
 		}
 	}
 
 	return monitor, nil
 }
 
-func (s *Service) GetMonitor(ctx context.Context, id string) (*domain.Monitor, error) {
-	return s.repo.GetByID(ctx, id)
+func (s *Service) GetMonitor(ctx context.Context, id, userID string) (*domain.Monitor, error) {
+	return s.repo.GetByIDForUser(ctx, id, userID)
 }
 
-func (s *Service) ListMonitors(ctx context.Context) ([]*domain.Monitor, error) {
-	return s.repo.List(ctx)
+func (s *Service) ListMonitors(ctx context.Context, userID string) ([]*domain.Monitor, error) {
+	return s.repo.ListForUser(ctx, userID)
 }
 
-func (s *Service) UpdateMonitor(ctx context.Context, id string, req *domain.UpdateMonitorRequest) (*domain.Monitor, error) {
+func (s *Service) UpdateMonitor(ctx context.Context, id, userID string, req *domain.UpdateMonitorRequest) (*domain.Monitor, error) {
 	if err := ValidateUpdateRequest(req); err != nil {
 		return nil, err
 	}
 
-	monitor, err := s.repo.Update(ctx, id, req)
+	monitor, err := s.repo.UpdateForUser(ctx, id, userID, req)
 	if err != nil {
 		return nil, err
 	}
 
-	// Update scheduler if available
 	if s.scheduler != nil {
 		if monitor.IsActive {
-			// If active, update the schedule
 			if err := s.scheduler.UpdateMonitor(monitor); err != nil {
-				// Log error but don't fail the update
+				// Log but don't fail
 			}
 		} else {
-			// If inactive, remove from scheduler
 			s.scheduler.RemoveMonitor(monitor.ID)
 		}
 	}
@@ -84,14 +81,12 @@ func (s *Service) UpdateMonitor(ctx context.Context, id string, req *domain.Upda
 	return monitor, nil
 }
 
-func (s *Service) DeleteMonitor(ctx context.Context, id string) error {
-	// Remove from scheduler first (before database deletion)
+func (s *Service) DeleteMonitor(ctx context.Context, id, userID string) error {
 	if s.scheduler != nil {
 		s.scheduler.RemoveMonitor(id)
 	}
 
-	// Then delete from database
-	return s.repo.Delete(ctx, id)
+	return s.repo.DeleteForUser(ctx, id, userID)
 }
 
 func (s *Service) GetActiveMonitors(ctx context.Context) ([]*domain.Monitor, error) {

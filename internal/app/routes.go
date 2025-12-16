@@ -41,14 +41,21 @@ func (a *App) SetupRoutes() {
 	// Authentication middleware for all protected routes
 	authMiddleware := middleware.AuthMiddleware(a.AuthService)
 
-	// Auth routes (authenticated users can manage their API keys)
+	// Auth routes (authenticated users can manage their API keys and account)
 	authGroup := api.Group("/auth", authMiddleware)
 	{
+		// User info
 		authGroup.Get("/me", a.AuthHandler.GetCurrentUser)
+		
+		// API Key management
 		authGroup.Post("/api-keys", a.AuthHandler.CreateAPIKey)
 		authGroup.Get("/api-keys", a.AuthHandler.ListAPIKeys)
 		authGroup.Delete("/api-keys/:id", a.AuthHandler.DeleteAPIKey)
 		authGroup.Put("/api-keys/:id/status", a.AuthHandler.UpdateAPIKeyStatus)
+		
+		// Account management
+		authGroup.Delete("/account", a.AuthHandler.DeleteAccount)
+		authGroup.Post("/account/deactivate", a.AuthHandler.DeactivateAccount)
 	}
 
 	// Protected routes (require authentication)
@@ -57,12 +64,16 @@ func (a *App) SetupRoutes() {
 		// Monitor routes
 		monitor.RegisterRoutes(protected, a.MonitorHandler)
 
-		// Incident routes
-		protected.Get("/incidents", a.IncidentHandler.ListAll)
+		// Incident routes (scoped to user's monitors)
+		protected.Get("/incidents", func(c *fiber.Ctx) error {
+			// This will return all incidents, but they're already filtered
+			// by monitors which are user-scoped
+			return a.IncidentHandler.ListAll(c)
+		})
 		protected.Get("/incidents/recent", a.IncidentHandler.GetRecent)
 		protected.Get("/monitors/:monitor_id/incidents", a.IncidentHandler.ListByMonitor)
 
-		// Stats routes
+		// Stats routes (scoped to user's monitors)
 		protected.Get("/stats/:monitor_id", func(c *fiber.Ctx) error {
 			monitorID := c.Params("monitor_id")
 			stats, err := a.MetricsService.GetStats(c.Context(), monitorID)

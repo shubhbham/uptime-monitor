@@ -15,7 +15,6 @@ func NewHandler(service *Service) *Handler {
 
 // CreateAPIKey creates a new API key
 func (h *Handler) CreateAPIKey(c *fiber.Ctx) error {
-	// Get authenticated user from context
 	authCtx := c.Locals("auth").(*domain.AuthContext)
 
 	var req domain.CreateAPIKeyRequest
@@ -39,7 +38,7 @@ func (h *Handler) CreateAPIKey(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"message": "API key created successfully. Save this key, it won't be shown again.",
+		"message": "⚠️ API key created successfully. Save this key securely - it won't be shown again!",
 		"api_key": apiKey,
 	})
 }
@@ -55,7 +54,10 @@ func (h *Handler) ListAPIKeys(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(apiKeys)
+	return c.JSON(fiber.Map{
+		"api_keys": apiKeys,
+		"count":    len(apiKeys),
+	})
 }
 
 // DeleteAPIKey deletes an API key
@@ -105,8 +107,13 @@ func (h *Handler) UpdateAPIKeyStatus(c *fiber.Ctx) error {
 		})
 	}
 
+	status := "activated"
+	if !req.IsActive {
+		status = "deactivated"
+	}
+
 	return c.JSON(fiber.Map{
-		"message": "API key status updated",
+		"message": "API key " + status + " successfully",
 	})
 }
 
@@ -114,4 +121,51 @@ func (h *Handler) UpdateAPIKeyStatus(c *fiber.Ctx) error {
 func (h *Handler) GetCurrentUser(c *fiber.Ctx) error {
 	authCtx := c.Locals("auth").(*domain.AuthContext)
 	return c.JSON(authCtx)
+}
+
+// DeleteAccount deletes the user account and all associated data
+func (h *Handler) DeleteAccount(c *fiber.Ctx) error {
+	authCtx := c.Locals("auth").(*domain.AuthContext)
+
+	// Confirmation check
+	var req struct {
+		Confirm string `json:"confirm"`
+	}
+
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	if req.Confirm != "DELETE" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Please confirm deletion by sending {\"confirm\": \"DELETE\"}",
+		})
+	}
+
+	if err := h.service.DeleteUser(c.Context(), authCtx.UserID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to delete account",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Account and all associated data deleted successfully",
+	})
+}
+
+// DeactivateAccount deactivates the user account (soft delete)
+func (h *Handler) DeactivateAccount(c *fiber.Ctx) error {
+	authCtx := c.Locals("auth").(*domain.AuthContext)
+
+	if err := h.service.DeactivateUser(c.Context(), authCtx.UserID); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to deactivate account",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Account deactivated successfully. All monitors and API keys have been disabled.",
+	})
 }

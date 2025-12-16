@@ -3,8 +3,10 @@ package auth
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/shubhbham/uptime-monitor/internal/auth"
 	"github.com/shubhbham/uptime-monitor/internal/config"
 	"github.com/shubhbham/uptime-monitor/internal/domain"
@@ -13,6 +15,7 @@ import (
 type Service struct {
 	repo          *Repository
 	clerkVerifier *auth.ClerkVerifier
+	clerkClient   *auth.ClerkClient
 	config        *config.AuthConfig
 }
 
@@ -20,32 +23,45 @@ func NewService(repo *Repository, cfg *config.AuthConfig) *Service {
 	return &Service{
 		repo:          repo,
 		clerkVerifier: auth.NewClerkVerifier(cfg.ClerkJWKSURL),
+		clerkClient:   auth.NewClerkClient(cfg.ClerkSecretKey),
 		config:        cfg,
 	}
 }
 
 // VerifyClerkToken verifies a Clerk JWT and returns/creates user
 func (s *Service) VerifyClerkToken(ctx context.Context, token string) (*domain.AuthContext, error) {
+	// Verify JWT token
 	claims, err := s.clerkVerifier.VerifyToken(token)
 	if err != nil {
 		return nil, fmt.Errorf("invalid token: %w", err)
 	}
 
-	// Check if user exists, if not create
-	user, err := s.repo.GetUserByClerkID(ctx, claims.GetUserID())
-	if err != nil {
-		// User doesn't exist, create new user
-		user = &domain.User{
-			UserID:      claims.GetUserID(),
-			UserType:    "clerk",
-			Email:       claims.GetEmail(),
-			Name:        claims.GetName(),
-			ClerkUserID: &claims.Subject,
-			IsActive:    true,
-		}
+	clerkUserID := claims.GetUserID()
 
-		if err := s.repo.CreateUser(ctx, user); err != nil {
-			return nil, fmt.Errorf("failed to create user: %w", err)
+	// Check if user exists
+	user, err := s.repo.GetUserByClerkID(ctx, clerkUserID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			// User doesn't exist - fetch from Clerk and create
+			user, err = s.createUserFromClerk(ctx, clerkUserID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create user: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to get user: %w", err)
+		}
+	}
+
+	// Check if user is active
+	if !user.IsActive {
+		return nil, fmt.Errorf("user account is deactivated")
+	}
+
+	// If email or name is empty, fetch from Clerk and update
+	if user.Email == "" || user.Name == "" {
+		if err := s.enrichUserDataFromClerk(ctx, user); err != nil {
+			// Log error but don't fail authentication
+			log.Printf("Failed to enrich user data from Clerk: %v", err)
 		}
 	}
 
@@ -56,6 +72,77 @@ func (s *Service) VerifyClerkToken(ctx context.Context, token string) (*domain.A
 		Name:     user.Name,
 		Scopes:   []string{"*"}, // Clerk users have all scopes
 	}, nil
+}
+
+// createUserFromClerk fetches user data from Clerk API and creates user
+func (s *Service) createUserFromClerk(ctx context.Context, clerkUserID string) (*domain.User, error) {
+	// Fetch user details from Clerk
+	clerkUser, err := s.clerkClient.GetUser(ctx, clerkUserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch user from Clerk: %w", err)
+	}
+
+	// Create user record
+	user := &domain.User{
+		UserID:      clerkUserID,
+		UserType:    "clerk",
+		Email:       clerkUser.GetEmail(),
+		Name:        clerkUser.GetFullName(),
+		ClerkUserID: &clerkUserID,
+		IsActive:    true,
+	}
+
+	// If name is still empty, use email as name
+	if user.Name == "" && user.Email != "" {
+		user.Name = user.Email
+	}
+
+	if err := s.repo.CreateUser(ctx, user); err != nil {
+		return nil, fmt.Errorf("failed to create user in database: %w", err)
+	}
+
+	log.Printf("Created new user from Clerk: %s (%s)", user.UserID, user.Email)
+
+	return user, nil
+}
+
+// enrichUserDataFromClerk updates user email and name from Clerk
+func (s *Service) enrichUserDataFromClerk(ctx context.Context, user *domain.User) error {
+	if user.ClerkUserID == nil {
+		return nil // Not a Clerk user
+	}
+
+	// Fetch user details from Clerk
+	clerkUser, err := s.clerkClient.GetUser(ctx, *user.ClerkUserID)
+	if err != nil {
+		return err
+	}
+
+	// Update user data
+	email := clerkUser.GetEmail()
+	name := clerkUser.GetFullName()
+
+	// If name is empty, use email
+	if name == "" && email != "" {
+		name = email
+	}
+
+	// Update only if we got new data
+	if email != "" {
+		user.Email = email
+	}
+	if name != "" {
+		user.Name = name
+	}
+
+	// Update in database
+	if err := s.repo.CreateUser(ctx, user); err != nil {
+		return err
+	}
+
+	log.Printf("Enriched user data from Clerk: %s", user.UserID)
+
+	return nil
 }
 
 // VerifyAPIKey verifies an API key and returns auth context
@@ -70,9 +157,18 @@ func (s *Service) VerifyAPIKey(ctx context.Context, rawKey string) (*domain.Auth
 		return nil, fmt.Errorf("invalid API key")
 	}
 
-	// Update usage tracking (async, don't block on errors)
+	// Additional check: verify user is still active
+	isActive, err := s.repo.IsUserActive(ctx, apiKey.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("user verification failed")
+	}
+	if !isActive {
+		return nil, fmt.Errorf("user account is deactivated")
+	}
+
+	// Update usage tracking (async, best-effort)
 	go func() {
-		updateCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		updateCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = s.repo.UpdateAPIKeyUsage(updateCtx, apiKey.ID)
 	}()
@@ -86,6 +182,15 @@ func (s *Service) VerifyAPIKey(ctx context.Context, rawKey string) (*domain.Auth
 
 // CreateAPIKey creates a new API key for a user
 func (s *Service) CreateAPIKey(ctx context.Context, userID string, req *domain.CreateAPIKeyRequest) (*domain.CreateAPIKeyResponse, error) {
+	// Verify user is active
+	isActive, err := s.repo.IsUserActive(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found")
+	}
+	if !isActive {
+		return nil, fmt.Errorf("cannot create API key for inactive user")
+	}
+
 	// Generate raw API key
 	rawKey, err := auth.GenerateAPIKey(s.config.APIKeyPrefix, s.config.APIKeyLength)
 	if err != nil {
@@ -140,20 +245,12 @@ func (s *Service) UpdateAPIKeyStatus(ctx context.Context, keyID, userID string, 
 	return s.repo.UpdateAPIKey(ctx, keyID, userID, isActive)
 }
 
-// GetOrCreateUser gets or creates a user
-func (s *Service) GetOrCreateUser(ctx context.Context, userID, userType, email, name string) (*domain.User, error) {
-	user, err := s.repo.GetUserByID(ctx, userID)
-	if err != nil {
-		user = &domain.User{
-			UserID:   userID,
-			UserType: userType,
-			Email:    email,
-			Name:     name,
-			IsActive: true,
-		}
-		if err := s.repo.CreateUser(ctx, user); err != nil {
-			return nil, err
-		}
-	}
-	return user, nil
+// DeleteUser deletes a user and all associated data (CASCADE)
+func (s *Service) DeleteUser(ctx context.Context, userID string) error {
+	return s.repo.DeleteUser(ctx, userID)
+}
+
+// DeactivateUser deactivates a user (soft delete)
+func (s *Service) DeactivateUser(ctx context.Context, userID string) error {
+	return s.repo.DeactivateUser(ctx, userID)
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shubhbham/uptime-monitor/internal/domain"
 )
@@ -79,6 +80,38 @@ func (r *Repository) GetUserByClerkID(ctx context.Context, clerkUserID string) (
 	return &user, nil
 }
 
+func (r *Repository) DeleteUser(ctx context.Context, userID string) error {
+	query := `DELETE FROM users WHERE user_id = $1`
+	result, err := r.db.Exec(ctx, query, userID)
+	if err != nil {
+		return err
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("user not found")
+	}
+
+	return nil
+}
+
+func (r *Repository) DeactivateUser(ctx context.Context, userID string) error {
+	query := `
+		UPDATE users
+		SET is_active = false, updated_at = NOW()
+		WHERE user_id = $1
+	`
+	result, err := r.db.Exec(ctx, query, userID)
+	if err != nil {
+		return err
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("user not found")
+	}
+
+	return nil
+}
+
 // API Key operations
 
 func (r *Repository) CreateAPIKey(ctx context.Context, apiKey *domain.APIKey) error {
@@ -101,23 +134,39 @@ func (r *Repository) CreateAPIKey(ctx context.Context, apiKey *domain.APIKey) er
 
 func (r *Repository) GetAPIKeyByHash(ctx context.Context, keyHash string) (*domain.APIKey, error) {
 	query := `
-		SELECT id, user_id, key_hash, name, key_prefix, scopes, rate_limit_per_hour, 
-		       is_active, expires_at, last_used_at, total_requests, created_at, updated_at
-		FROM api_keys
-		WHERE key_hash = $1 AND is_active = true
+		SELECT 
+			ak.id, ak.user_id, ak.key_hash, ak.name, ak.key_prefix, ak.scopes, 
+			ak.rate_limit_per_hour, ak.is_active, ak.expires_at, ak.last_used_at, 
+			ak.total_requests, ak.created_at, ak.updated_at,
+			u.is_active as user_is_active
+		FROM api_keys ak
+		INNER JOIN users u ON ak.user_id = u.user_id
+		WHERE ak.key_hash = $1 
+		  AND ak.is_active = true
+		  AND u.is_active = true
 	`
 
 	var apiKey domain.APIKey
 	var scopesJSON []byte
+	var userIsActive bool
 
 	err := r.db.QueryRow(ctx, query, keyHash).Scan(
 		&apiKey.ID, &apiKey.UserID, &apiKey.KeyHash, &apiKey.Name, &apiKey.KeyPrefix,
 		&scopesJSON, &apiKey.RateLimitPerHour, &apiKey.IsActive, &apiKey.ExpiresAt,
 		&apiKey.LastUsedAt, &apiKey.TotalRequests, &apiKey.CreatedAt, &apiKey.UpdatedAt,
+		&userIsActive,
 	)
 
 	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("invalid or inactive API key")
+		}
 		return nil, err
+	}
+
+	// Additional safety check
+	if !userIsActive {
+		return nil, fmt.Errorf("user account is deactivated")
 	}
 
 	if err := json.Unmarshal(scopesJSON, &apiKey.Scopes); err != nil {
@@ -133,11 +182,11 @@ func (r *Repository) GetAPIKeyByHash(ctx context.Context, keyHash string) (*doma
 }
 
 func (r *Repository) UpdateAPIKeyUsage(ctx context.Context, keyID string) error {
+	// Best-effort update, don't block on errors
 	query := `
 		UPDATE api_keys
 		SET last_used_at = NOW(),
-		    total_requests = total_requests + 1,
-		    updated_at = NOW()
+		    total_requests = total_requests + 1
 		WHERE id = $1
 	`
 
@@ -219,4 +268,20 @@ func (r *Repository) UpdateAPIKey(ctx context.Context, keyID, userID string, isA
 	}
 
 	return nil
+}
+
+// Check if user exists and is active
+func (r *Repository) IsUserActive(ctx context.Context, userID string) (bool, error) {
+	query := `SELECT is_active FROM users WHERE user_id = $1`
+	
+	var isActive bool
+	err := r.db.QueryRow(ctx, query, userID).Scan(&isActive)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return false, fmt.Errorf("user not found")
+		}
+		return false, err
+	}
+
+	return isActive, nil
 }

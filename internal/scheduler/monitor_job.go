@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -18,6 +19,8 @@ type MonitorCheckJob struct {
 	incidentRepo    IncidentRepository
 	metricsService  MetricsService
 	ctx             context.Context
+	stopped         bool
+	stopMutex       sync.RWMutex
 }
 
 type MonitorRepository interface {
@@ -50,14 +53,23 @@ func NewMonitorCheckJob(
 		incidentRepo:   incidentRepo,
 		metricsService: metricsService,
 		ctx:            ctx,
+		stopped:        false,
 	}
 }
 
 func (j *MonitorCheckJob) Run() {
-	// Check if job should stop (monitor deleted or context cancelled)
+	// Check if job already stopped (prevents repeated logging)
+	j.stopMutex.RLock()
+	if j.stopped {
+		j.stopMutex.RUnlock()
+		return
+	}
+	j.stopMutex.RUnlock()
+
+	// Check if context cancelled (monitor deleted/deactivated)
 	select {
 	case <-j.ctx.Done():
-		log.Printf("Job cancelled for monitor %s", j.monitor.ID)
+		j.markStopped()
 		return
 	default:
 	}
@@ -70,7 +82,9 @@ func (j *MonitorCheckJob) Run() {
 	currentMonitor, err := j.monitorRepo.GetByID(checkCtx, j.monitor.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			log.Printf("Monitor %s no longer exists, stopping checks", j.monitor.ID)
+			// Monitor deleted - stop permanently and log once
+			j.markStopped()
+			log.Printf("Monitor %s (%s) deleted, stopping checks permanently", j.monitor.Name, j.monitor.ID)
 			return
 		}
 		log.Printf("Failed to verify monitor %s existence: %v", j.monitor.ID, err)
@@ -82,8 +96,7 @@ func (j *MonitorCheckJob) Run() {
 
 	// Skip if monitor is inactive
 	if !j.monitor.IsActive {
-		log.Printf("Monitor %s is inactive, skipping check", j.monitor.ID)
-		return
+		return // Don't log, just skip quietly
 	}
 
 	// Perform the actual HTTP check
@@ -103,7 +116,8 @@ func (j *MonitorCheckJob) Run() {
 	if err := j.monitorRepo.SaveCheck(checkCtx, check); err != nil {
 		// Check if it's a foreign key violation (monitor was deleted)
 		if isForeignKeyViolation(err) {
-			log.Printf("Monitor %s was deleted, stopping checks", j.monitor.ID)
+			j.markStopped()
+			log.Printf("Monitor %s (%s) deleted (FK violation), stopping checks permanently", j.monitor.Name, j.monitor.ID)
 			return
 		}
 		log.Printf("Failed to save check for monitor %s: %v", j.monitor.ID, err)
@@ -119,6 +133,12 @@ func (j *MonitorCheckJob) Run() {
 	}
 }
 
+func (j *MonitorCheckJob) markStopped() {
+	j.stopMutex.Lock()
+	j.stopped = true
+	j.stopMutex.Unlock()
+}
+
 func (j *MonitorCheckJob) handleIncidents(ctx context.Context, result *domain.CheckResult) {
 	openIncident, err := j.incidentRepo.GetOpenIncident(ctx, j.monitor.ID)
 	
@@ -129,7 +149,7 @@ func (j *MonitorCheckJob) handleIncidents(ctx context.Context, result *domain.Ch
 			if _, createErr := j.incidentRepo.Create(ctx, j.monitor.ID, result.ErrorMessage); createErr != nil {
 				log.Printf("Failed to create incident for monitor %s: %v", j.monitor.ID, createErr)
 			} else {
-				log.Printf("Created incident for monitor %s: %s", j.monitor.Name, j.monitor.URL)
+				log.Printf("🔴 Created incident for monitor %s: %s", j.monitor.Name, j.monitor.URL)
 			}
 		}
 		// else: incident already exists, do nothing
@@ -141,8 +161,8 @@ func (j *MonitorCheckJob) handleIncidents(ctx context.Context, result *domain.Ch
 				log.Printf("Failed to resolve incident %d: %v", openIncident.ID, resolveErr)
 			} else {
 				duration := time.Since(openIncident.StartedAt)
-				log.Printf("Resolved incident for monitor %s: %s (downtime: %v)", 
-					j.monitor.Name, j.monitor.URL, duration)
+				log.Printf("🟢 Resolved incident for monitor %s: %s (downtime: %v)", 
+					j.monitor.Name, j.monitor.URL, duration.Round(time.Second))
 			}
 		}
 	}

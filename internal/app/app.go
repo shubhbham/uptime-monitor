@@ -76,25 +76,49 @@ func NewApp(cfg *config.Config) (*App, error) {
 	// Wire scheduler to monitor service
 	monitorService.SetScheduler(sched)
 
-	// Create Fiber app
+	// Create Fiber app with production-ready configuration
 	app := fiber.New(fiber.Config{
+		// Error handling
 		ErrorHandler:  middleware.ErrorHandler(),
+		
+		// Timeouts
 		ReadTimeout:   cfg.Server.ReadTimeout,
 		WriteTimeout:  cfg.Server.WriteTimeout,
-		CaseSensitive: true,
-		StrictRouting: false,
-		ServerHeader:  "UptimeMonitor",
-		AppName:       "Uptime Monitor API v1.0",
+		IdleTimeout:   cfg.Server.ReadTimeout * 2,
+		
+		// Production settings
+		CaseSensitive:     true,
+		StrictRouting:     false,
+		ServerHeader:      "UptimeMonitor",
+		AppName:           "Uptime Monitor API v1.0",
+		
+		// CRITICAL: Proxy awareness for production deployments
+		ProxyHeader:       fiber.HeaderXForwardedFor,
+		EnableTrustedProxyCheck: true,
+		TrustedProxies:    []string{"0.0.0.0/0"}, // Trust all proxies (adjust for production)
+		
+		// Body limits
+		BodyLimit:         4 * 1024 * 1024, // 4MB
+		
+		// Disable startup message in production
+		DisableStartupMessage: cfg.Server.Environment == "production",
 	})
 
 	// Global middleware
-	app.Use(recover.New())
-	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "*",
-		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
-		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-API-Key",
-		AllowCredentials: false,
+	app.Use(recover.New(recover.Config{
+		EnableStackTrace: cfg.Server.Environment == "development",
 	}))
+	
+	// CORS - Production ready
+	app.Use(cors.New(cors.Config{
+		AllowOrigins:     getAllowedOrigins(cfg.Server.Environment),
+		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS,PATCH",
+		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,X-API-Key,X-Requested-With",
+		AllowCredentials: false, // Set true if using cookies
+		ExposeHeaders:    "Content-Length,Content-Type",
+		MaxAge:           300, // Cache preflight for 5 minutes
+	}))
+	
 	app.Use(middleware.RequestLogger())
 
 	return &App{
@@ -116,4 +140,18 @@ func NewApp(cfg *config.Config) (*App, error) {
 		HTTPChecker:     httpChecker,
 		Scheduler:       sched,
 	}, nil
+}
+
+// getAllowedOrigins returns CORS origins based on environment
+func getAllowedOrigins(environment string) string {
+	switch environment {
+	case "production":
+		// In production, specify your actual domains
+		return "https://yourapp.com,https://www.yourapp.com,https://app.yourapp.com"
+	case "staging":
+		return "https://staging.yourapp.com,https://dev.yourapp.com"
+	default:
+		// Development - allow all
+		return "*"
+	}
 }

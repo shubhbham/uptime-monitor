@@ -36,7 +36,7 @@ lint: ## Run linter (requires golangci-lint)
 
 # ---------------- Docker ----------------
 
-DOCKER_USER := your-dockerhub-username
+DOCKER_USER := shubhbham
 IMAGE_NAME := uptime-monitor
 IMAGE_TAG ?= latest
 IMAGE := $(DOCKER_USER)/$(IMAGE_NAME):$(IMAGE_TAG)

@@ -147,9 +147,10 @@ func getAllowedOrigins(environment string) string {
 	switch environment {
 	case "production":
 		// In production, specify your actual domains
-		return "https://yourapp.com,https://www.yourapp.com,https://app.yourapp.com"
+		// return "https://yourapp.com,https://www.yourapp.com,https://app.yourapp.com"
+		return "http://localhost:3000,http://127.0.0.1:3000"
 	case "staging":
-		return "https://staging.yourapp.com,https://dev.yourapp.com"
+		return "http://localhost:3000,http://127.0.0.1:3000"
 	default:
 		// Development - allow all
 		return "*"

@@ -135,12 +135,18 @@ func (h *Handler) GetChecks(c *fiber.Ctx) error {
 	if limit > 200 {
 		limit = 200
 	}
+	
+	cursor := c.Query("cursor")
 
-	checks, err := h.service.GetRecentChecks(c.Context(), id, limit)
+	checks, nextCursor, err := h.service.GetPaginatedChecks(c.Context(), id, limit, cursor)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch checks",
 		})
+	}
+
+	if nextCursor != "" {
+		c.Set("X-Next-Cursor", nextCursor)
 	}
 
 	return c.JSON(checks)

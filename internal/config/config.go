@@ -46,6 +46,9 @@ type AuthConfig struct {
 	APIKeyLength        int
 	
 	// JWT configuration
+	// NOTE: JWT_EXPIRATION_HOURS is reserved for future use when implementing
+	// custom JWT token generation. Currently, the system uses Clerk for JWT
+	// authentication (external) and API Keys for programmatic access.
 	JWTExpirationHours  int
 }
 
@@ -107,6 +110,7 @@ func LoadConfig() (*Config, error) {
 
 	apiKeyPrefix := getEnv("API_KEY_PREFIX", "sk_live_")
 	apiKeyLength, _ := getEnvAsInt("API_KEY_LENGTH", 32)
+	// Reserved for future use - custom JWT token generation
 	jwtExpirationHours, _ := getEnvAsInt("JWT_EXPIRATION_HOURS", 24)
 
 	return &Config{

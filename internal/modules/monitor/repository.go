@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shubhbham/uptime-monitor/internal/domain"
 )
@@ -308,6 +309,54 @@ func (r *Repository) GetRecentChecks(ctx context.Context, monitorID string, limi
 	rows, err := r.db.Query(ctx, query, monitorID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get recent checks: %w", err)
+	}
+	defer rows.Close()
+
+	var checks []*domain.MonitorCheck
+	for rows.Next() {
+		var check domain.MonitorCheck
+		err := rows.Scan(
+			&check.ID, &check.MonitorID, &check.StatusCode,
+			&check.ResponseTimeMs, &check.IsUp, &check.ErrorMessage, &check.CheckedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan check: %w", err)
+		}
+		checks = append(checks, &check)
+	}
+
+	return checks, nil
+}
+
+func (r *Repository) GetPaginatedChecks(ctx context.Context, monitorID string, limit int, cursorTime time.Time, cursorID int64) ([]*domain.MonitorCheck, error) {
+	var rows pgx.Rows
+	var err error
+
+	if cursorTime.IsZero() {
+		// First page
+		query := `
+			SELECT id, monitor_id, status_code, response_time_ms, is_up, error_message, checked_at
+			FROM monitor_checks
+			WHERE monitor_id = $1
+			ORDER BY checked_at DESC, id DESC
+			LIMIT $2
+		`
+		rows, err = r.db.Query(ctx, query, monitorID, limit)
+	} else {
+		// Subsequent pages
+		query := `
+			SELECT id, monitor_id, status_code, response_time_ms, is_up, error_message, checked_at
+			FROM monitor_checks
+			WHERE monitor_id = $1 
+			AND (checked_at < $2 OR (checked_at = $2 AND id < $3))
+			ORDER BY checked_at DESC, id DESC
+			LIMIT $4
+		`
+		rows, err = r.db.Query(ctx, query, monitorID, cursorTime, cursorID, limit)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get paginated checks: %w", err)
 	}
 	defer rows.Close()
 

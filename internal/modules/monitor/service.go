@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"context"
+	"time"
 
 	"github.com/shubhbham/uptime-monitor/internal/domain"
 )
@@ -95,4 +96,36 @@ func (s *Service) GetActiveMonitors(ctx context.Context) ([]*domain.Monitor, err
 
 func (s *Service) GetRecentChecks(ctx context.Context, monitorID string, limit int) ([]*domain.MonitorCheck, error) {
 	return s.repo.GetRecentChecks(ctx, monitorID, limit)
+}
+
+func (s *Service) GetPaginatedChecks(ctx context.Context, monitorID string, limit int, cursor string) ([]*domain.MonitorCheck, string, error) {
+	var cursorTime time.Time
+	var cursorID int64
+	var err error
+
+	if cursor != "" {
+		cursorTime, cursorID, err = DecodeCursor(cursor)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	// Fetch limit + 1 to check if there are more items
+	checks, err := s.repo.GetPaginatedChecks(ctx, monitorID, limit+1, cursorTime, cursorID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var nextCursor string
+	if len(checks) > limit {
+		// There are more items, so we need a cursor for the next page
+		// The cursor points to the last item of the *current* page (index limit-1)
+		lastItem := checks[limit-1]
+		nextCursor = EncodeCursor(lastItem.CheckedAt, lastItem.ID)
+		
+		// Truncate to the requested limit
+		checks = checks[:limit]
+	}
+
+	return checks, nextCursor, nil
 }

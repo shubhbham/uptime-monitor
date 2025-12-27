@@ -46,16 +46,19 @@ func (a *App) SetupRoutes() {
 	{
 		// User info
 		authGroup.Get("/me", a.AuthHandler.GetCurrentUser)
-		
+
 		// API Key management
 		authGroup.Post("/api-keys", a.AuthHandler.CreateAPIKey)
 		authGroup.Get("/api-keys", a.AuthHandler.ListAPIKeys)
 		authGroup.Delete("/api-keys/:id", a.AuthHandler.DeleteAPIKey)
 		authGroup.Put("/api-keys/:id/status", a.AuthHandler.UpdateAPIKeyStatus)
-		
+
 		// Account management
 		authGroup.Delete("/account", a.AuthHandler.DeleteAccount)
 		authGroup.Post("/account/deactivate", a.AuthHandler.DeactivateAccount)
+
+		// User stats route
+		authGroup.Get("/stats", a.AuthHandler.GetUserStats)
 	}
 
 	// Protected routes (require authentication)

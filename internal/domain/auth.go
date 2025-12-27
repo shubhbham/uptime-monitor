@@ -63,3 +63,18 @@ type ClerkJWTClaims struct {
 	Exp   int64  `json:"exp"`
 	Iat   int64  `json:"iat"`
 }
+
+// UserStats represents aggregated user statistics from the user_stats view
+type UserStats struct {
+	UserID         string    `json:"user_id"`
+	Email          string    `json:"email"`
+	Name           string    `json:"name"`
+	UserType       string    `json:"user_type"`
+	IsActive       bool      `json:"is_active"`
+	TotalMonitors  int       `json:"total_monitors"`
+	ActiveMonitors int       `json:"active_monitors"`
+	TotalAPIKeys   int       `json:"total_api_keys"`
+	ActiveAPIKeys  int       `json:"active_api_keys"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}

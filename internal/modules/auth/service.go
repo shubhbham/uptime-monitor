@@ -203,7 +203,7 @@ func (s *Service) CreateAPIKey(ctx context.Context, userID string, req *domain.C
 
 	// Set defaults
 	if req.RateLimitPerHour == 0 {
-		req.RateLimitPerHour = 1000
+		req.RateLimitPerHour = 3000
 	}
 	if len(req.Scopes) == 0 {
 		req.Scopes = []string{"monitors:read", "monitors:write", "incidents:read", "stats:read"}
@@ -253,4 +253,9 @@ func (s *Service) DeleteUser(ctx context.Context, userID string) error {
 // DeactivateUser deactivates a user (soft delete)
 func (s *Service) DeactivateUser(ctx context.Context, userID string) error {
 	return s.repo.DeactivateUser(ctx, userID)
+}
+
+// GetUserStats returns statistics for the authenticated user
+func (s *Service) GetUserStats(ctx context.Context, userID string) (*domain.UserStats, error) {
+	return s.repo.GetUserStats(ctx, userID)
 }

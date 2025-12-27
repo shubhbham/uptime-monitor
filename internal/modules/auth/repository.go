@@ -273,7 +273,7 @@ func (r *Repository) UpdateAPIKey(ctx context.Context, keyID, userID string, isA
 // Check if user exists and is active
 func (r *Repository) IsUserActive(ctx context.Context, userID string) (bool, error) {
 	query := `SELECT is_active FROM users WHERE user_id = $1`
-	
+
 	var isActive bool
 	err := r.db.QueryRow(ctx, query, userID).Scan(&isActive)
 	if err != nil {
@@ -284,4 +284,34 @@ func (r *Repository) IsUserActive(ctx context.Context, userID string) (bool, err
 	}
 
 	return isActive, nil
+}
+
+// GetUserStats returns user statistics for a specific user
+func (r *Repository) GetUserStats(ctx context.Context, userID string) (*domain.UserStats, error) {
+	query := `
+		SELECT 
+			user_id, email, name, user_type, is_active,
+			total_monitors, active_monitors,
+			total_api_keys, active_api_keys,
+			created_at, updated_at
+		FROM user_stats
+		WHERE user_id = $1
+	`
+
+	var s domain.UserStats
+	err := r.db.QueryRow(ctx, query, userID).Scan(
+		&s.UserID, &s.Email, &s.Name, &s.UserType, &s.IsActive,
+		&s.TotalMonitors, &s.ActiveMonitors,
+		&s.TotalAPIKeys, &s.ActiveAPIKeys,
+		&s.CreatedAt, &s.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("stats not found")
+		}
+		return nil, err
+	}
+
+	return &s, nil
 }

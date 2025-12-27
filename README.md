@@ -275,6 +275,14 @@ Response:
 }
 ```
 
+```
+### User
+
+**Get User Stats**
+```http
+GET /api/v1/auth/stats
+```
+
 ## Configuration
 
 ### Monitor Settings

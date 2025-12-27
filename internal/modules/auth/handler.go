@@ -169,3 +169,17 @@ func (h *Handler) DeactivateAccount(c *fiber.Ctx) error {
 		"message": "Account deactivated successfully. All monitors and API keys have been disabled.",
 	})
 }
+
+// GetUserStats returns statistics for the authenticated user
+func (h *Handler) GetUserStats(c *fiber.Ctx) error {
+	authCtx := c.Locals("auth").(*domain.AuthContext)
+
+	stats, err := h.service.GetUserStats(c.Context(), authCtx.UserID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch user stats",
+		})
+	}
+
+	return c.JSON(stats)
+}

@@ -8,6 +8,7 @@ import (
 	"github.com/shubhbham/uptime-monitor/internal/httpclient"
 	"github.com/shubhbham/uptime-monitor/internal/middleware"
 	"github.com/shubhbham/uptime-monitor/internal/modules/auth"
+	"github.com/shubhbham/uptime-monitor/internal/modules/email"
 	"github.com/shubhbham/uptime-monitor/internal/modules/incident"
 	"github.com/shubhbham/uptime-monitor/internal/modules/metrics"
 	"github.com/shubhbham/uptime-monitor/internal/modules/monitor"
@@ -32,6 +33,7 @@ type App struct {
 	IncidentService   *incident.Service
 	MetricsService    *metrics.Service
 	AuthService       *auth.Service
+	EmailService      *email.Service
 
 	// Handlers
 	MonitorHandler    *monitor.Handler
@@ -61,6 +63,7 @@ func NewApp(cfg *config.Config) (*App, error) {
 	incidentService := incident.NewService(incidentRepo)
 	metricsService := metrics.NewService(metricsRepo, db.Pool)
 	authService := auth.NewService(authRepo, &cfg.Auth)
+	emailService := email.NewService(&cfg.Email)
 
 	// Initialize handlers
 	monitorHandler := monitor.NewHandler(monitorService)
@@ -71,7 +74,7 @@ func NewApp(cfg *config.Config) (*App, error) {
 	httpClient := httpclient.NewClient(cfg.Monitor.DefaultTimeout)
 	httpChecker := worker.NewHTTPChecker(httpClient)
 
-	sched := scheduler.NewScheduler(httpChecker, monitorRepo, incidentRepo, metricsService)
+	sched := scheduler.NewScheduler(httpChecker, monitorRepo, incidentRepo, metricsService, emailService)
 
 	// Wire scheduler to monitor service
 	monitorService.SetScheduler(sched)
@@ -133,6 +136,7 @@ func NewApp(cfg *config.Config) (*App, error) {
 		IncidentService: incidentService,
 		MetricsService:  metricsService,
 		AuthService:     authService,
+		EmailService:    emailService,
 		MonitorHandler:  monitorHandler,
 		IncidentHandler: incidentHandler,
 		AuthHandler:     authHandler,

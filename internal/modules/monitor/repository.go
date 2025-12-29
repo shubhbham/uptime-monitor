@@ -44,10 +44,12 @@ func (r *Repository) Create(ctx context.Context, req *domain.CreateMonitorReques
 
 func (r *Repository) GetByID(ctx context.Context, id string) (*domain.Monitor, error) {
 	query := `
-		SELECT id, user_id, name, url, method, expected_status, interval_seconds, 
-		       timeout_seconds, is_active, created_at, updated_at
-		FROM monitors
-		WHERE id = $1
+		SELECT m.id, m.user_id, m.name, m.url, m.method, m.expected_status, m.interval_seconds, 
+		       m.timeout_seconds, m.is_active, m.created_at, m.updated_at,
+		       COALESCE(u.email, '') as user_email
+		FROM monitors m
+		LEFT JOIN users u ON m.user_id = u.user_id
+		WHERE m.id = $1
 	`
 
 	var monitor domain.Monitor
@@ -55,6 +57,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*domain.Monitor, e
 		&monitor.ID, &monitor.UserID, &monitor.Name, &monitor.URL,
 		&monitor.Method, &monitor.ExpectedStatus, &monitor.IntervalSeconds,
 		&monitor.TimeoutSeconds, &monitor.IsActive, &monitor.CreatedAt, &monitor.UpdatedAt,
+		&monitor.UserEmail,
 	)
 
 	if err != nil {

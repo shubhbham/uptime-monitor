@@ -14,6 +14,7 @@ type Monitor struct {
 	IntervalSeconds int       `json:"interval_seconds"`
 	TimeoutSeconds  int       `json:"timeout_seconds"`
 	IsActive        bool      `json:"is_active"`
+	UserEmail       string    `json:"-"` // Internal use only
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }

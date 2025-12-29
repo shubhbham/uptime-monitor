@@ -8,6 +8,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 	"github.com/shubhbham/uptime-monitor/internal/domain"
+	"github.com/shubhbham/uptime-monitor/internal/modules/email"
 	"github.com/shubhbham/uptime-monitor/internal/worker"
 )
 
@@ -17,6 +18,7 @@ type Scheduler struct {
 	monitorRepo    MonitorRepository
 	incidentRepo   IncidentRepository
 	metricsService MetricsService
+	emailService   *email.Service
 	jobs           map[string]*scheduledJob
 	mu             sync.RWMutex
 }
@@ -36,6 +38,7 @@ func NewScheduler(
 	monitorRepo MonitorRepository,
 	incidentRepo IncidentRepository,
 	metricsService MetricsService,
+	emailService *email.Service,
 ) *Scheduler {
 	return &Scheduler{
 		cron:           cron.New(),
@@ -43,6 +46,7 @@ func NewScheduler(
 		monitorRepo:    monitorRepo,
 		incidentRepo:   incidentRepo,
 		metricsService: metricsService,
+		emailService:   emailService,
 		jobs:           make(map[string]*scheduledJob),
 	}
 }
@@ -54,7 +58,7 @@ func (s *Scheduler) Start() {
 
 func (s *Scheduler) Stop() {
 	s.mu.Lock()
-	
+
 	// Cancel all running jobs
 	for _, job := range s.jobs {
 		if job.cancel != nil {
@@ -91,6 +95,7 @@ func (s *Scheduler) AddMonitor(monitor *domain.Monitor) error {
 		s.monitorRepo,
 		s.incidentRepo,
 		s.metricsService,
+		s.emailService,
 		ctx,
 	)
 
@@ -119,12 +124,12 @@ func (s *Scheduler) RemoveMonitor(monitorID string) {
 	if job, exists := s.jobs[monitorID]; exists {
 		// Remove from cron
 		s.cron.Remove(job.entryID)
-		
+
 		// Cancel any running jobs
 		if job.cancel != nil {
 			job.cancel()
 		}
-		
+
 		delete(s.jobs, monitorID)
 		log.Printf("Removed monitor from scheduler: %s", monitorID)
 	}
@@ -133,7 +138,7 @@ func (s *Scheduler) RemoveMonitor(monitorID string) {
 func (s *Scheduler) UpdateMonitor(monitor *domain.Monitor) error {
 	// Remove existing job
 	s.RemoveMonitor(monitor.ID)
-	
+
 	// Add new job with updated configuration
 	return s.AddMonitor(monitor)
 }

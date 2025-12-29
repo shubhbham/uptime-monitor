@@ -2,10 +2,14 @@ module github.com/shubhbham/uptime-monitor
 
 go 1.24.9
 
-require github.com/jackc/pgx/v5 v5.7.6
+require (
+	github.com/getbrevo/brevo-go v1.1.3
+	github.com/jackc/pgx/v5 v5.7.6
+)
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/antihax/optional v1.0.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
@@ -17,6 +21,7 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
+	golang.org/x/oauth2 v0.21.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 )

@@ -12,6 +12,25 @@ type Config struct {
 	Database DatabaseConfig
 	Monitor  MonitorConfig
 	Auth     AuthConfig
+	Email    EmailConfig
+}
+
+type EmailConfig struct {
+	BrevoAPIKey              string
+	BrevoSandboxMode         bool
+	BrevoAPIBaseURL          string
+	AlertFromEmail           string
+	AlertFromName            string
+	AlertTagIncident         string
+	AlertTagService          string
+	AlertOnIncidentOpen      bool
+	AlertOnIncidentResolve   bool
+	AlertsEnabled            bool
+	AlertMaxRetries          int
+	AlertRetryBackoffSeconds int
+	AlertCooldownMinutes     int
+	AlertReplyToEmail        string
+	AlertReplyToName         string
 }
 
 type ServerConfig struct {
@@ -40,11 +59,11 @@ type AuthConfig struct {
 	ClerkSecretKey      string
 	ClerkJWKSURL        string
 	ClerkPublishableKey string
-	
+
 	// API Key configuration
 	APIKeyPrefix        string
 	APIKeyLength        int
-	
+
 	// JWT configuration
 	// NOTE: JWT_EXPIRATION_HOURS is reserved for future use when implementing
 	// custom JWT token generation. Currently, the system uses Clerk for JWT
@@ -140,7 +159,36 @@ func LoadConfig() (*Config, error) {
 			APIKeyLength:        apiKeyLength,
 			JWTExpirationHours:  jwtExpirationHours,
 		},
+		Email: EmailConfig{
+			BrevoAPIKey:            getEnv("BREVO_API_KEY", ""),
+			BrevoSandboxMode:       getEnv("BREVO_SANDBOX_MODE", "false") == "true",
+			BrevoAPIBaseURL:        getEnv("BREVO_API_BASE_URL", "https://api.brevo.com"),
+			AlertFromEmail:         getEnv("ALERT_FROM_EMAIL", ""),
+			AlertFromName:          getEnv("ALERT_FROM_NAME", "Uptime Monitor"),
+			AlertTagIncident:       getEnv("ALERT_TAG_INCIDENT", "incident"),
+			AlertTagService:        getEnv("ALERT_TAG_SERVICE", "uptime-monitor"),
+			AlertOnIncidentOpen:    getEnv("ALERT_ON_INCIDENT_OPEN", "true") == "true",
+			AlertOnIncidentResolve: getEnv("ALERT_ON_INCIDENT_RESOLVE", "true") == "true",
+			AlertsEnabled:          getEnv("ALERTS_ENABLED", "true") == "true",
+			AlertMaxRetries:        getEnvInt("ALERT_MAX_RETRIES", 3),
+			AlertRetryBackoffSeconds: getEnvInt("ALERT_RETRY_BACKOFF_SECONDS", 30),
+			AlertCooldownMinutes:   getEnvInt("ALERT_COOLDOWN_MINUTES", 30),
+			AlertReplyToEmail:      getEnv("ALERT_REPLY_TO_EMAIL", "no-reply@uptime.local"),
+			AlertReplyToName:       getEnv("ALERT_REPLY_TO_NAME", "No Reply"),
+		},
 	}, nil
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	valueStr := getEnv(key, "")
+	if valueStr == "" {
+		return defaultValue
+	}
+	val, err := strconv.Atoi(valueStr)
+	if err != nil {
+		return defaultValue
+	}
+	return val
 }
 
 func getEnv(key, defaultValue string) string {

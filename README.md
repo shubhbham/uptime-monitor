@@ -305,6 +305,21 @@ GET /api/v1/auth/stats
 - **DB_MIN_CONNS**: Minimum connections (default: 5)
 - **DB_SSL_MODE**: SSL mode (require/disable)
 
+### Email Configuration (Brevo)
+
+- **BREVO_API_KEY**: Your Brevo API Key
+- **BREVO_SANDBOX_MODE**: true/false (If true, logs email instead of sending)
+- **BREVO_API_BASE_URL**: API Base URL (default: https://api.brevo.com)
+- **ALERT_FROM_EMAIL**: Sender email address
+- **ALERT_FROM_NAME**: Sender name
+- **ALERT_TAG_INCIDENT**: Tag for incident emails
+- **ALERT_TAG_SERVICE**: Tag for service identification
+- **ALERTS_ENABLED**: true/false (Master switch for alerts)
+- **ALERT_REPLY_TO_EMAIL**: Reply-to email address
+- **ALERT_MAX_RETRIES**: Number of retries for failed API calls (default: 3)
+- **ALERT_RETRY_BACKOFF_SECONDS**: Seconds to wait between retries (default: 30)
+- **ALERT_COOLDOWN_MINUTES**: Minimum time before sending another alert for the same monitor (default: 30)
+
 ## Development
 
 ### Project Structure

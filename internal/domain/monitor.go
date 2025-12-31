@@ -14,6 +14,7 @@ type Monitor struct {
 	IntervalSeconds int       `json:"interval_seconds"`
 	TimeoutSeconds  int       `json:"timeout_seconds"`
 	IsActive        bool      `json:"is_active"`
+	Notify          bool      `json:"notify"`
 	UserEmail       string    `json:"-"` // Internal use only
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
@@ -36,6 +37,7 @@ type CreateMonitorRequest struct {
 	ExpectedStatus  int     `json:"expected_status"`
 	IntervalSeconds int     `json:"interval_seconds"`
 	TimeoutSeconds  int     `json:"timeout_seconds"`
+	Notify          bool    `json:"notify"`
 	UserID          *string `json:"user_id,omitempty"`
 }
 
@@ -47,6 +49,7 @@ type UpdateMonitorRequest struct {
 	IntervalSeconds *int    `json:"interval_seconds,omitempty"`
 	TimeoutSeconds  *int    `json:"timeout_seconds,omitempty"`
 	IsActive        *bool   `json:"is_active,omitempty"`
+	Notify          *bool   `json:"notify,omitempty"`
 }
 
 type MonitorWithStats struct {

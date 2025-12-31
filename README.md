@@ -202,7 +202,8 @@ Content-Type: application/json
   "method": "GET",
   "expected_status": 200,
   "interval_seconds": 60,
-  "timeout_seconds": 10
+  "timeout_seconds": 10,
+  "notify": true
 }
 ```
 
@@ -223,6 +224,12 @@ Content-Type: application/json
 
 {
   "name": "Updated Name",
+  "url": "https://example.com",
+  "method": "GET",
+  "expected_status": 200,
+  "interval_seconds": 60,
+  "timeout_seconds": 10,
+  "notify": true,
   "is_active": false
 }
 ```

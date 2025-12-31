@@ -37,6 +37,7 @@ create table monitors (
     expected_status int not null default 200,
     interval_seconds int not null default 60,
     timeout_seconds int not null default 10,
+    notify boolean not null default false,
     is_active boolean not null default true,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
@@ -55,6 +56,7 @@ create table monitors (
 -- Monitors indexes
 create index idx_monitors_user_id on monitors(user_id);
 create index idx_monitors_is_active on monitors(is_active);
+create index idx_monitors_notify on monitors(notify) where notify = true and is_active = true;
 create index idx_monitors_user_id_is_active on monitors(user_id, is_active);
 
 -- ============================================================================

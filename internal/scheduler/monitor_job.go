@@ -176,8 +176,12 @@ func (j *MonitorCheckJob) handleIncidents(ctx context.Context, result *domain.Ch
 				if result.ErrorMessage != nil {
 					cause = *result.ErrorMessage
 				}
-				if err := j.emailService.SendIncidentOpened(emailCtx, j.monitor.Name, j.monitor.URL, cause, j.monitor.UserEmail); err != nil {
-					log.Printf("Failed to send incident email: %v", err)
+
+				// Only send if notifications are enabled for this monitor
+				if j.monitor.Notify {
+					if err := j.emailService.SendIncidentOpened(emailCtx, j.monitor.Name, j.monitor.URL, cause, j.monitor.UserEmail); err != nil {
+						log.Printf("Failed to send incident email: %v", err)
+					}
 				}
 			}
 		}
@@ -198,8 +202,11 @@ func (j *MonitorCheckJob) handleIncidents(ctx context.Context, result *domain.Ch
 				emailCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 				defer cancel()
 
-				if err := j.emailService.SendIncidentResolved(emailCtx, j.monitor.Name, j.monitor.URL, duration.Round(time.Second).String(), j.monitor.UserEmail); err != nil {
-					log.Printf("Failed to send resolved email: %v", err)
+				// Only send if notifications are enabled for this monitor
+				if j.monitor.Notify {
+					if err := j.emailService.SendIncidentResolved(emailCtx, j.monitor.Name, j.monitor.URL, duration.Round(time.Second).String(), j.monitor.UserEmail); err != nil {
+						log.Printf("Failed to send resolved email: %v", err)
+					}
 				}
 			}
 		}
